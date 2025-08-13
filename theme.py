@@ -25,5 +25,4 @@ class Theme:
     # IMAGENS (Certifique-se que esses arquivos existem na pasta do projeto)
     BOT_AVATAR_PATH = "avatar_souzalink.png"
     USER_AVATAR_PATH = "avatar_user.png"
-    CHAT_BG_PATH = "chat_background.png"
     AVATAR_SIZE = (40, 40)

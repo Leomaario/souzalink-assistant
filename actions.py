@@ -1,10 +1,16 @@
 # actions.py
-
 import pandas as pd
 from thefuzz import process
+import sys, os
+
+def resource_path(relative_path):
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
 
 class MenuAction:
-    """Classe base para todas as ações do menu."""
     def execute(self):
         raise NotImplementedError("Cada ação precisa implementar o método execute()!")
 
@@ -12,87 +18,69 @@ class ListarRamalAction(MenuAction):
     def __init__(self):
         self.ramais_db = {}
         try:
-            df = pd.read_excel("RAMAL.xlsx")
+            caminho_planilha = resource_path("RAMAL.xlsx")
+            df = pd.read_excel(caminho_planilha)
             print("Planilha de ramais carregada com sucesso!")
-            for index, row in df.iterrows():
+            for _, row in df.iterrows():
                 setor_limpo = str(row['SETOR']).lower().strip()
-                self.ramais_db[setor_limpo] = { "setor": str(row['SETOR']).strip(), "ramal": str(row['RAMAL']) }
+                self.ramais_db[setor_limpo] = {"setor": str(row['SETOR']).strip(), "ramal": str(row['RAMAL'])}
         except Exception as e:
-            print(f"AVISO: Erro ao ler 'RAMAL.xlsx': {e}.")
-            self.ramais_db = { "ti": {"setor": "TI", "ramal": "1234"}, "rh": {"setor": "RH", "ramal": "5678"} }
+            print(f"AVISO: Erro ao ler 'RAMAL.xlsx': {e}. Usando dados de exemplo.")
+            self.ramais_db = {"ti": {"setor": "TI", "ramal": "1234"}}
 
     def execute(self):
-        return ["Você quer listar todos os ramais ou apenas de um setor específico? Por favor, digite 'todos' ou o nome do setor."]
+        return ["Você quer listar todos os ramais ou de um setor específico? Digite 'todos' ou o nome do setor."]
 
-    # --- MÉTODO ATUALIZADO PARA MANTER A CONVERSA ATIVA ---
-    def processar_resposta(self, resposta_do_usuario):
-        busca = resposta_do_usuario.lower().strip()
-        
-        # Frase para continuar a conversa após uma busca bem-sucedida
-        follow_up_prompt = "\n\nQual outro setor deseja pesquisar? (Digite 'menu' para voltar)"
-
-        if not self.ramais_db:
-             return ["Desculpe, não consegui carregar os dados dos ramais."], True
-
-        # --- LÓGICA DE BUSCA INTELIGENTE ATUALIZADA ---
-
-        # 1. Busca Exata
+    def processar_resposta(self, user_input):
+        busca = user_input.lower().strip()
+        follow_up = "\n\nQual outro setor deseja pesquisar? (Digite 'menu' para voltar)"
+        if not self.ramais_db: return ["Desculpe, não consegui carregar os dados dos ramais."], True
         if busca == 'todos':
-            todos_os_ramais = "Aqui está a lista de todos os ramais: 📝\n\n"
+            response = "Aqui está a lista de todos os ramais: 📝\n\n"
             for info in self.ramais_db.values():
-                todos_os_ramais += f"- {info['setor']}: [NEGRITO]{info['ramal']}[/NEGRITO]\n"
-            # Adiciona a pergunta de continuação e mantém a conversa ativa (False)
-            return [todos_os_ramais + follow_up_prompt], False
-        
-        elif busca in self.ramais_db:
+                response += f"- {info['setor']}: [NEGRITO]{info['ramal']}[/NEGRITO]\n"
+            return [response + follow_up], False
+        if busca in self.ramais_db:
             info = self.ramais_db[busca]
-            response = f"Aqui está o ramal do setor '{busca.upper()}':\n- {info['setor']}: [NEGRITO]{info['ramal']}[/NEGRITO]"
-            # Adiciona a pergunta de continuação e mantém a conversa ativa (False)
-            return [response + follow_up_prompt], False
-        
-        # 2. Busca Parcial
-        matches_parciais = [info for setor_key, info in self.ramais_db.items() if busca in setor_key]
-        
-        if matches_parciais:
-            response = ""
-            if len(matches_parciais) == 1:
-                info = matches_parciais[0]
-                response = f"Encontrado: {info['setor']}: [NEGRITO]{info['ramal']}[/NEGRITO]"
-            else:
-                response = f"Encontrei múltiplos setores com '{resposta_do_usuario}':\n\n"
-                for info in matches_parciais:
-                    response += f"- {info['setor']}: [NEGRITO]{info['ramal']}[/NEGRITO]\n"
-            # Adiciona a pergunta de continuação e mantém a conversa ativa (False)
-            return [response + follow_up_prompt], False
-
-        # 3. Correção de Erros de Digitação
-        melhor_match, score = process.extractOne(busca, self.ramais_db.keys())
-        
+            response = f"Aqui está o ramal de '{info['setor']}':\n- {info['setor']}: [NEGRITO]{info['ramal']}[/NEGRITO]"
+            return [response + follow_up], False
+        matches = [info for setor, info in self.ramais_db.items() if busca in setor]
+        if matches:
+            response = f"Encontrei estes setores com '{user_input}':\n\n"
+            for info in matches:
+                response += f"- {info['setor']}: [NEGRITO]{info['ramal']}[/NEGRITO]\n"
+            return [response + follow_up], False
+        best_match, score = process.extractOne(busca, self.ramais_db.keys())
         if score >= 80:
-            info = self.ramais_db[melhor_match]
+            info = self.ramais_db[best_match]
             response = f"Você quis dizer '{info['setor']}'?\n- {info['setor']}: [NEGRITO]{info['ramal']}[/NEGRITO]"
-            # Adiciona a pergunta de continuação e mantém a conversa ativa (False)
-            return [response + follow_up_prompt], False
-
-        # 4. Se nada der certo, permite que o usuário tente de novo.
-        response = f"Desculpe, não encontrei o setor '{resposta_do_usuario}'. Tente novamente."
-        return [response], False
-
-
-# --- OUTRAS CLASSES (CONTINUAM IGUAIS) ---
+            return [response + follow_up], False
+        return [f"Desculpe, não encontrei o setor '{user_input}'. Tente novamente."], False
 
 class AbrirChamadoTIAction(MenuAction):
     def execute(self):
-        return [ "Ok, para abrir um chamado para a TI, você precisa acessar o seguinte link:", "http://192.168.10.5/glpi/front/logout.php" ]
+        # Exemplo genérico de link para sistema de chamados
+        return ["Ok, para abrir um chamado para a TI, acesse o seguinte link:", "http://seu-servidor.com/glpi/chamados"]
 
 class AbrirChamadoManutencaoAction(MenuAction):
     def execute(self):
-        return [ "Entendido, para abrir um chamado para a manutenção, acesse o link abaixo:", "https://scrb.neovero.com" ]
+        # Exemplo genérico
+        return ["Para abrir um chamado para a manutenção, acesse o link:", "http://seu-servidor.com/manutencao/chamados"]
 
 class NotificarLDSistemasAction(MenuAction):
     def execute(self):
-        return [ "Para notificar no LD Sistemas, acesse o link:", "https://sistemas.ldsistemas.com/public/" ]
+        # Exemplo genérico
+        return ["Para acessar o Sistema Interno, use o link:", "https://seu-sistema-interno.com/login"]
 
 class EsqueciSenhaAction(MenuAction):
     def execute(self):
-        return [ "Para alterar sua senha em qualquer sistema, você precisa abrir um chamado no GLPI:", "http://192.168.10.5/glpi/front/logout.php", "No formulário você terá as opções. Qualquer dúvida entre em contato com a TI no Ramal 225." ]
+        return ["Para resetar sua senha, por favor, use o portal de autoatendimento:", "http://seu-servidor.com/glpi/reset-senha", "Se o problema persistir, contate o Ramal [NEGRITO]1234[/NEGRITO]."]
+    
+class AcessarEmailAction(MenuAction):
+    def execute(self):
+        return ["Para acessar seu e-mail, por favor, clique no seguinte link:", "https://outlook.office.com/mail/"]
+
+class FalarWhatsAppAction(MenuAction):
+    def execute(self):
+        # Placeholder para o número de WhatsApp
+        return ["Para falar com o suporte via WhatsApp, clique no link:", "https://wa.me/5511999999999?text=Olá,%20preciso%20de%20suporte!"]
